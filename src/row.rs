@@ -52,14 +52,17 @@ impl<T> Row for Vec<T> {
     const COLUMN_NAMES: &'static [&'static str] = &[];
 }
 
+pub(crate) fn join_row_columns<T>() -> Option<String> where T: Row {
+    join_column_names(T::COLUMN_NAMES)
+}
+
 /// Collects all field names in depth and joins them with comma.
-pub(crate) fn join_column_names<R: Row>() -> Option<String> {
-    if R::COLUMN_NAMES.is_empty() {
+pub(crate) fn join_column_names(column_names: &[&str]) -> Option<String> {
+    if column_names.is_empty() {
         return None;
     }
 
-    let out = R::COLUMN_NAMES
-        .iter()
+    let out = column_names        .iter()
         .enumerate()
         .fold(String::new(), |mut res, (idx, name)| {
             if idx > 0 {
@@ -95,8 +98,8 @@ mod tests {
             two: u32,
         }
 
-        assert_eq!(join_column_names::<Simple1>().unwrap(), "`one`");
-        assert_eq!(join_column_names::<Simple2>().unwrap(), "`one`,`two`");
+        assert_eq!(join_row_columns::<Simple1>().unwrap(), "`one`");
+        assert_eq!(join_row_columns::<Simple2>().unwrap(), "`one`,`two`");
     }
 
     #[test]
@@ -106,7 +109,7 @@ mod tests {
             _a: u32,
         }
 
-        assert_eq!(join_column_names::<(SomeRow, u32)>().unwrap(), "`_a`");
+        assert_eq!(join_row_columns::<(SomeRow, u32)>().unwrap(), "`_a`");
     }
 
     #[test]
@@ -120,7 +123,7 @@ mod tests {
             one: u32,
         }
 
-        assert_eq!(join_column_names::<TopLevel>().unwrap(), "`two`");
+        assert_eq!(join_row_columns::<TopLevel>().unwrap(), "`two`");
     }
 
     #[test]
@@ -135,7 +138,7 @@ mod tests {
             two: u32,
         }
 
-        assert_eq!(join_column_names::<TopLevel>().unwrap(), "`one`");
+        assert_eq!(join_row_columns::<TopLevel>().unwrap(), "`one`");
     }
 
     #[test]
@@ -143,9 +146,9 @@ mod tests {
         #[derive(Row)]
         struct NamedTuple(u32, u32);
 
-        assert_eq!(join_column_names::<u32>(), None);
-        assert_eq!(join_column_names::<(u32, u64)>(), None);
-        assert_eq!(join_column_names::<NamedTuple>(), None);
+        assert_eq!(join_row_columns::<u32>(), None);
+        assert_eq!(join_row_columns::<(u32, u64)>(), None);
+        assert_eq!(join_row_columns::<NamedTuple>(), None);
     }
 
     #[test]
@@ -160,6 +163,6 @@ mod tests {
             r#match: u32,
         }
 
-        assert_eq!(join_column_names::<MyRow>().unwrap(), "`type`,`if`");
+        assert_eq!(join_row_columns::<MyRow>().unwrap(), "`type`,`if`");
     }
 }

@@ -65,7 +65,7 @@ impl SqlBuilder {
 
     pub(crate) fn bind_fields<T: Row>(&mut self) {
         if let Self::InProgress { parts, size } = self {
-            if let Some(fields) = row::join_column_names::<T>() {
+            if let Some(fields) = row::join_row_columns::<T>() {
                 for part in parts.iter_mut().filter(|p| matches!(p, Part::Fields)) {
                     *size += fields.len();
                     *part = Part::Text(fields.clone());

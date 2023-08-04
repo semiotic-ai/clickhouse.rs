@@ -7,7 +7,7 @@ use futures::{
 use serde::Serialize;
 use tokio::time::{Duration, Instant};
 
-use crate::{error::Result, insert::Insert, row::Row, ticks::Ticks, Client};
+use crate::{error::Result, insert::Insert, row::{Row, self}, ticks::Ticks, Client, schema::Schema};
 
 const DEFAULT_MAX_ENTRIES: u64 = 500_000;
 
@@ -25,6 +25,7 @@ pub struct Inserter<T> {
     ticks: Ticks,
     committed: Quantities,
     uncommitted_entries: u64,
+    schema: Option<T>
 }
 
 /// Statistics about inserted rows.
@@ -46,9 +47,10 @@ impl Quantities {
 
 impl<T> Inserter<T>
 where
-    T: Row,
+    T: Schema + row::Primitive,
 {
-    pub(crate) fn new(client: &Client, table: &str) -> Result<Self> {
+
+    pub(crate) fn new(client: &Client, table: &str, schema: Option<T>) -> Result<Self> {
         Ok(Self {
             client: client.clone(),
             table: table.into(),
@@ -59,6 +61,7 @@ where
             ticks: Ticks::default(),
             committed: Quantities::ZERO,
             uncommitted_entries: 0,
+            schema,
         })
     }
 
@@ -223,7 +226,11 @@ where
     #[inline(never)]
     fn init_insert(&mut self) -> Result<()> {
         debug_assert!(self.insert.is_none());
-        let mut new_insert: Insert<T> = self.client.insert(&self.table)?;
+
+        let mut new_insert: Insert<T> = match &self.schema {
+            Some(schema) => self.client.insert_with_schema(&self.table, schema)?,
+            None => self.client.insert(&self.table)?,
+        };
         new_insert.set_timeouts(self.send_timeout, self.end_timeout);
         self.insert = Some(new_insert);
         Ok(())

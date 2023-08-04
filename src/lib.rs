@@ -13,6 +13,8 @@ use hyper::client::connect::HttpConnector;
 use hyper_tls::HttpsConnector;
 
 pub use clickhouse_derive::Row;
+use row::Primitive;
+use schema::Schema;
 
 pub use self::{compression::Compression, row::Row};
 use self::{error::Result, http_client::HttpClient};
@@ -23,6 +25,7 @@ pub mod inserter;
 pub mod query;
 pub mod serde;
 pub mod sql;
+pub mod schema;
 #[cfg(feature = "test-util")]
 pub mod test;
 #[cfg(feature = "watch")]
@@ -41,7 +44,7 @@ mod cursor;
 mod http_client;
 mod response;
 mod row;
-pub mod rowbinary;
+mod rowbinary;
 mod ticks;
 
 const TCP_KEEPALIVE: Duration = Duration::from_secs(60);
@@ -180,9 +183,20 @@ impl Client {
         insert::Insert::new(self, table)
     }
 
+
+    pub fn insert_with_schema<T: Schema>(&self, table: &str, schema:&T) -> Result<insert::Insert<T>> {
+        insert::Insert::new_with_schema(self, table, schema)
+    }
+
     /// Creates an inserter to perform multiple INSERTs.
-    pub fn inserter<T: Row>(&self, table: &str) -> Result<inserter::Inserter<T>> {
-        inserter::Inserter::new(self, table)
+    pub fn inserter<T: Row + Primitive>(&self, table: &str) -> Result<inserter::Inserter<T>> {
+        inserter::Inserter::new(self, table, None)
+    }
+
+
+    /// Creates an inserter to perform multiple INSERTs.
+    pub fn inserter_with_schema<T: Schema + Primitive>(&self, table: &str, schema: T) -> Result<inserter::Inserter<T>> {
+        inserter::Inserter::new(self, table, Some(schema))
     }
 
     /// Starts a new SELECT/DDL query.

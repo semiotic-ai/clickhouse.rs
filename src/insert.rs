@@ -13,7 +13,9 @@ use crate::{
     error::{Error, Result},
     response::Response,
     row::{self, Row},
-    rowbinary, Client, Compression,
+    rowbinary,
+    schema::Schema,
+    Client, Compression,
 };
 
 const BUFFER_SIZE: usize = 128 * 1024;
@@ -58,11 +60,24 @@ impl<T> Insert<T> {
     where
         T: Row,
     {
-        let fields = row::join_column_names::<T>().expect("please provide a schema");
-        Insert::new_with_schema(client, table, fields)
+        Insert::new_with_columns(client, table, T::COLUMN_NAMES)
     }
 
-    pub(crate) fn new_with_schema(client: &Client, table: &str, fields: String) -> Result<Self> {
+    pub(crate) fn new_with_schema(client: &Client, table: &str, schema: &T) -> Result<Self>
+    where
+        T: Schema,
+    {
+        Insert::new_with_columns(client, table, schema.get_columns())
+    }
+
+    pub(crate) fn new_with_columns(
+        client: &Client,
+        table: &str,
+        columns: &[&'static str],
+    ) -> Result<Self>
+    where
+        T: Schema,
+    {
         let mut url = Url::parse(&client.url).map_err(|err| Error::InvalidParams(err.into()))?;
         let mut pairs = url.query_pairs_mut();
         pairs.clear();
@@ -71,6 +86,7 @@ impl<T> Insert<T> {
             pairs.append_pair("database", database);
         }
 
+        let fields = row::join_column_names(columns).expect("please provide a schema");
         // TODO: what about escaping a table name?
         // https://clickhouse.yandex/docs/en/query_language/syntax/#syntax-identifiers
         let query = format!("INSERT INTO {table}({fields}) FORMAT RowBinary");
