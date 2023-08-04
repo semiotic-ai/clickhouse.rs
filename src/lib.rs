@@ -13,7 +13,6 @@ use hyper::client::connect::HttpConnector;
 use hyper_tls::HttpsConnector;
 
 pub use clickhouse_derive::Row;
-use row::Primitive;
 use schema::Schema;
 
 pub use self::{compression::Compression, row::Row};
@@ -185,17 +184,17 @@ impl Client {
 
 
     pub fn insert_with_schema<T: Schema>(&self, table: &str, schema:&T) -> Result<insert::Insert<T>> {
-        insert::Insert::new_with_schema(self, table, schema)
+        insert::Insert::new_with_schema(self, table, &schema)
     }
 
     /// Creates an inserter to perform multiple INSERTs.
-    pub fn inserter<T: Row + Primitive>(&self, table: &str) -> Result<inserter::Inserter<T>> {
+    pub fn inserter<T: Row>(&self, table: &str) -> Result<inserter::Inserter<T>> {
         inserter::Inserter::new(self, table, None)
     }
 
 
     /// Creates an inserter to perform multiple INSERTs.
-    pub fn inserter_with_schema<T: Schema + Primitive>(&self, table: &str, schema: T) -> Result<inserter::Inserter<T>> {
+    pub fn inserter_with_schema<T: Schema>(&self, table: &str, schema: T) -> Result<inserter::Inserter<T>> {
         inserter::Inserter::new(self, table, Some(schema))
     }
 

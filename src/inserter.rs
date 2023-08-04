@@ -7,7 +7,7 @@ use futures::{
 use serde::Serialize;
 use tokio::time::{Duration, Instant};
 
-use crate::{error::Result, insert::Insert, row::{Row, self}, ticks::Ticks, Client, schema::Schema};
+use crate::{error::Result, insert::Insert, row::Row, ticks::Ticks, Client, schema::Schema};
 
 const DEFAULT_MAX_ENTRIES: u64 = 500_000;
 
@@ -47,7 +47,7 @@ impl Quantities {
 
 impl<T> Inserter<T>
 where
-    T: Schema + row::Primitive,
+    T: Schema,
 {
 
     pub(crate) fn new(client: &Client, table: &str, schema: Option<T>) -> Result<Self> {
@@ -229,7 +229,7 @@ where
 
         let mut new_insert: Insert<T> = match &self.schema {
             Some(schema) => self.client.insert_with_schema(&self.table, schema)?,
-            None => self.client.insert(&self.table)?,
+            None => todo!(),
         };
         new_insert.set_timeouts(self.send_timeout, self.end_timeout);
         self.insert = Some(new_insert);
