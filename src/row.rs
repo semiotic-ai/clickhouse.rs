@@ -53,11 +53,11 @@ impl<T> Row for Vec<T> {
 }
 
 pub(crate) fn join_row_columns<T>() -> Option<String> where T: Row {
-    join_column_names(T::COLUMN_NAMES)
+    join_column_names(T::COLUMN_NAMES.iter().map(|s| *s).collect())
 }
 
 /// Collects all field names in depth and joins them with comma.
-pub(crate) fn join_column_names(column_names: &[&str]) -> Option<String> {
+pub(crate) fn join_column_names(column_names: Vec<&str>) -> Option<String> {
     if column_names.is_empty() {
         return None;
     }

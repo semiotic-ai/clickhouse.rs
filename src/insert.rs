@@ -60,7 +60,7 @@ impl<T> Insert<T> {
     where
         T: Row,
     {
-        Insert::new_with_columns(client, table, T::COLUMN_NAMES)
+        Insert::new_with_columns(client, table, T::COLUMN_NAMES.iter().map(|s| *s).collect())
     }
 
     pub(crate) fn new_with_schema(client: &Client, table: &str, schema: &T) -> Result<Self>
@@ -70,11 +70,7 @@ impl<T> Insert<T> {
         Insert::new_with_columns(client, table, schema.get_columns())
     }
 
-    pub(crate) fn new_with_columns(
-        client: &Client,
-        table: &str,
-        columns: &[&'static str],
-    ) -> Result<Self>
+    pub(crate) fn new_with_columns(client: &Client, table: &str, columns: Vec<&str>) -> Result<Self>
     where
         T: Schema,
     {
