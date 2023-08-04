@@ -7,7 +7,7 @@ use serde::{
 use crate::error::{Error, Result};
 
 /// Serializes `value` using the RowBinary format and writes to `buffer`.
-pub(crate) fn serialize_into(buffer: impl BufMut, value: &impl Serialize) -> Result<()> {
+pub fn serialize_into(buffer: impl BufMut, value: &impl Serialize) -> Result<()> {
     let mut serializer = RowBinarySerializer { buffer };
     value.serialize(&mut serializer)?;
     Ok(())
@@ -17,7 +17,7 @@ pub(crate) fn serialize_into(buffer: impl BufMut, value: &impl Serialize) -> Res
 ///
 /// See https://clickhouse.yandex/docs/en/interfaces/formats/#rowbinary for details.
 pub struct RowBinarySerializer<B> {
-    buffer: B,
+    pub buffer: B,
 }
 
 macro_rules! impl_num {
