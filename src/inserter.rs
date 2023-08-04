@@ -166,9 +166,9 @@ where
     /// # Panics
     /// If called after previous call returned an error.
     #[inline]
-    pub fn write<'a>(&'a mut self, row: &T) -> impl Future<Output = Result<()>> + 'a + Send
+    pub fn write<'a, B>(&'a mut self, row: &B) -> impl Future<Output = Result<()>> + 'a + Send
     where
-        T: Serialize,
+        B: Serialize,
     {
         self.uncommitted_entries += 1;
         if self.insert.is_none() {
