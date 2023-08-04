@@ -41,7 +41,7 @@ mod cursor;
 mod http_client;
 mod response;
 mod row;
-mod rowbinary;
+pub mod rowbinary;
 mod ticks;
 
 const TCP_KEEPALIVE: Duration = Duration::from_secs(60);

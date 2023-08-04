@@ -16,7 +16,7 @@ pub(crate) fn serialize_into(buffer: impl BufMut, value: &impl Serialize) -> Res
 /// A serializer for the RowBinary format.
 ///
 /// See https://clickhouse.yandex/docs/en/interfaces/formats/#rowbinary for details.
-struct RowBinarySerializer<B> {
+pub struct RowBinarySerializer<B> {
     buffer: B,
 }
 
@@ -61,8 +61,9 @@ impl<'a, B: BufMut> Serializer for &'a mut RowBinarySerializer<B> {
     }
 
     #[inline]
-    fn serialize_char(self, _v: char) -> Result<()> {
-        todo!();
+    fn serialize_char(self, v: char) -> Result<()> {
+        self.buffer.put_u8(v as u8);
+        Ok(())
     }
 
     #[inline]

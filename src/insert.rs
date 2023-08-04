@@ -58,6 +58,11 @@ impl<T> Insert<T> {
     where
         T: Row,
     {
+        let fields = row::join_column_names::<T>().expect("please provide a schema");
+        Insert::new_with_schema(client, table, fields)
+    }
+
+    pub(crate) fn new_with_schema(client: &Client, table: &str, fields: String) -> Result<Self> {
         let mut url = Url::parse(&client.url).map_err(|err| Error::InvalidParams(err.into()))?;
         let mut pairs = url.query_pairs_mut();
         pairs.clear();
@@ -65,9 +70,6 @@ impl<T> Insert<T> {
         if let Some(database) = &client.database {
             pairs.append_pair("database", database);
         }
-
-        let fields = row::join_column_names::<T>()
-            .expect("the row type must be a struct or a wrapper around it");
 
         // TODO: what about escaping a table name?
         // https://clickhouse.yandex/docs/en/query_language/syntax/#syntax-identifiers
