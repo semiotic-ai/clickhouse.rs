@@ -38,6 +38,8 @@ pub enum Error {
     BadResponse(String),
     #[error("timeout expired")]
     TimedOut,
+    #[error("schema not found")]
+    SchemaNotFound,
 
     // Internally handled errors, not part of public API.
     // XXX: move to another error?

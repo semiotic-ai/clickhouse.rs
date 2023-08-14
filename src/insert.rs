@@ -82,7 +82,7 @@ impl<T> Insert<T> {
             pairs.append_pair("database", database);
         }
 
-        let fields = row::join_column_names(columns).expect("please provide a schema");
+        let fields = row::join_column_names(columns).ok_or(Error::SchemaNotFound)?;
         // TODO: what about escaping a table name?
         // https://clickhouse.yandex/docs/en/query_language/syntax/#syntax-identifiers
         let query = format!("INSERT INTO {table}({fields}) FORMAT RowBinary");
