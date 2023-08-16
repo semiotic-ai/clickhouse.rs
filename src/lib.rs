@@ -13,6 +13,7 @@ use hyper::client::connect::HttpConnector;
 use hyper_tls::HttpsConnector;
 
 pub use clickhouse_derive::Row;
+use inserter::{RowInserter, SchemaInserter};
 use schema::Schema;
 
 pub use self::{compression::Compression, row::Row};
@@ -191,7 +192,10 @@ impl Client {
     }
 
     /// Creates an inserter to perform multiple INSERTs.
-    pub fn inserter<T: Row + 'static>(&self, table: &str) -> Result<inserter::Inserter<T>> {
+    pub fn inserter<T: Row + 'static>(
+        &self,
+        table: &str,
+    ) -> Result<inserter::Inserter<RowInserter<T>, T>> {
         inserter::Inserter::new(self, table)
     }
 
@@ -200,7 +204,7 @@ impl Client {
         &self,
         table: &str,
         schema: T,
-    ) -> Result<inserter::Inserter<T>> {
+    ) -> Result<inserter::Inserter<SchemaInserter<T>, T>> {
         inserter::Inserter::new_with_schema(self, table, schema)
     }
 

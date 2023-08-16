@@ -1,4 +1,4 @@
-use std::mem;
+use std::{marker::PhantomData, mem};
 
 use futures::{
     future::{self, Either},
@@ -15,18 +15,22 @@ const DEFAULT_MAX_ENTRIES: u64 = 500_000;
 ///
 /// Rows are being sent progressively to spread network load.
 #[must_use]
-pub struct Inserter<T> {
+pub struct Inserter<T, U>
+where
+    T: InsertIniter<U>,
+{
     table: String,
     max_entries: u64,
     send_timeout: Option<Duration>,
     end_timeout: Option<Duration>,
-    insert_initer: Box<dyn InsertIniter<T>>,
+    insert_initer: T,
     ticks: Ticks,
     committed: Quantities,
     uncommitted_entries: u64,
+    _marker: PhantomData<fn() -> U>,
 }
 
-trait InsertIniter<T> {
+pub trait InsertIniter<T> {
     fn init_insert(
         &mut self,
         table: &str,
@@ -130,35 +134,39 @@ impl Quantities {
         transactions: 0,
     };
 }
-impl<T: 'static> Inserter<T> {
-    pub(crate) fn new(client: &Client, table: &str) -> Result<Self>
-    where
-        T: Row,
-    {
-        let insert_initer = Box::new(RowInserter {
+
+impl<T> Inserter<RowInserter<T>, T>
+where
+    T: Row,
+{
+    pub(crate) fn new(client: &Client, table: &str) -> Result<Self> {
+        let insert_initer: RowInserter<T> = RowInserter {
             client: client.clone(),
             insert: None,
-        });
-        Ok(Self {
-            table: table.into(),
-            max_entries: DEFAULT_MAX_ENTRIES,
-            send_timeout: None,
-            end_timeout: None,
-            ticks: Ticks::default(),
-            committed: Quantities::ZERO,
-            uncommitted_entries: 0,
-            insert_initer,
-        })
+        };
+        Inserter::new_private(table, insert_initer)
     }
-    pub(crate) fn new_with_schema(client: &Client, table: &str, schema: T) -> Result<Self>
-    where
-        T: Schema,
-    {
-        let insert_initer = Box::new(SchemaInserter {
+}
+
+impl<T> Inserter<SchemaInserter<T>, T>
+where
+    T: Schema,
+{
+    pub(crate) fn new_with_schema(client: &Client, table: &str, schema: T) -> Result<Self> {
+        let insert_initer = SchemaInserter {
             client: client.clone(),
             insert: None,
             schema,
-        });
+        };
+        Inserter::new_private(table, insert_initer)
+    }
+}
+
+impl<T, U> Inserter<T, U>
+where
+    T: InsertIniter<U>,
+{
+    fn new_private(table: &str, insert_initer: T) -> Result<Self> {
         Ok(Self {
             table: table.into(),
             max_entries: DEFAULT_MAX_ENTRIES,
@@ -168,6 +176,7 @@ impl<T: 'static> Inserter<T> {
             committed: Quantities::ZERO,
             uncommitted_entries: 0,
             insert_initer,
+            _marker: PhantomData,
         })
     }
 
