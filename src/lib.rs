@@ -22,9 +22,9 @@ pub mod error;
 pub mod insert;
 pub mod inserter;
 pub mod query;
+pub mod schema;
 pub mod serde;
 pub mod sql;
-pub mod schema;
 #[cfg(feature = "test-util")]
 pub mod test;
 #[cfg(feature = "watch")]
@@ -182,20 +182,26 @@ impl Client {
         insert::Insert::new(self, table)
     }
 
-
-    pub fn insert_with_schema<T: Schema>(&self, table: &str, schema:&T) -> Result<insert::Insert<T>> {
+    pub fn insert_with_schema<T: Schema>(
+        &self,
+        table: &str,
+        schema: &T,
+    ) -> Result<insert::Insert<T>> {
         insert::Insert::new_with_schema(self, table, &schema)
     }
 
     /// Creates an inserter to perform multiple INSERTs.
-    pub fn inserter<T: Row>(&self, table: &str) -> Result<inserter::Inserter<T>> {
-        inserter::Inserter::new(self, table, None)
+    pub fn inserter<T: Row + 'static>(&self, table: &str) -> Result<inserter::Inserter<T>> {
+        inserter::Inserter::new(self, table)
     }
 
-
     /// Creates an inserter to perform multiple INSERTs.
-    pub fn inserter_with_schema<T: Schema>(&self, table: &str, schema: T) -> Result<inserter::Inserter<T>> {
-        inserter::Inserter::new(self, table, Some(schema))
+    pub fn inserter_with_schema<T: Schema + 'static>(
+        &self,
+        table: &str,
+        schema: T,
+    ) -> Result<inserter::Inserter<T>> {
+        inserter::Inserter::new_with_schema(self, table, schema)
     }
 
     /// Starts a new SELECT/DDL query.

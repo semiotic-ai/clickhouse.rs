@@ -7,7 +7,7 @@ use futures::{
 use serde::Serialize;
 use tokio::time::{Duration, Instant};
 
-use crate::{error::Result, insert::Insert, row::Row, ticks::Ticks, Client, schema::Schema};
+use crate::{error::Result, insert::Insert, row::Row, schema::Schema, ticks::Ticks, Client};
 
 const DEFAULT_MAX_ENTRIES: u64 = 500_000;
 
@@ -16,16 +16,102 @@ const DEFAULT_MAX_ENTRIES: u64 = 500_000;
 /// Rows are being sent progressively to spread network load.
 #[must_use]
 pub struct Inserter<T> {
-    client: Client,
     table: String,
     max_entries: u64,
     send_timeout: Option<Duration>,
     end_timeout: Option<Duration>,
-    insert: Option<Insert<T>>,
+    insert_initer: Box<dyn InsertIniter<T>>,
     ticks: Ticks,
     committed: Quantities,
     uncommitted_entries: u64,
-    schema: Option<T>
+}
+
+trait InsertIniter<T> {
+    fn init_insert(
+        &mut self,
+        table: &str,
+        send_timeout: Option<Duration>,
+        end_timeout: Option<Duration>,
+    ) -> Result<()>;
+
+    fn should_create_insert(&self) -> bool;
+
+    fn get_insert(&mut self) -> Option<&mut Insert<T>>;
+
+    fn take_insert(&mut self) -> Option<Insert<T>>;
+}
+
+pub struct RowInserter<T> {
+    client: Client,
+    insert: Option<Insert<T>>,
+}
+
+impl<T> InsertIniter<T> for RowInserter<T>
+where
+    T: Row,
+{
+    fn init_insert(
+        &mut self,
+        table: &str,
+        send_timeout: Option<Duration>,
+        end_timeout: Option<Duration>,
+    ) -> Result<()> {
+        debug_assert!(self.insert.is_none());
+
+        let mut new_insert: Insert<T> = self.client.insert(table)?;
+        new_insert.set_timeouts(send_timeout, end_timeout);
+        self.insert = Some(new_insert);
+        Ok(())
+    }
+
+    fn should_create_insert(&self) -> bool {
+        self.insert.is_none()
+    }
+
+    fn get_insert(&mut self) -> Option<&mut Insert<T>> {
+        self.insert.as_mut()
+    }
+
+    fn take_insert(&mut self) -> Option<Insert<T>> {
+        self.insert.take()
+    }
+}
+
+pub struct SchemaInserter<T> {
+    client: Client,
+    insert: Option<Insert<T>>,
+    schema: T,
+}
+
+impl<T> InsertIniter<T> for SchemaInserter<T>
+where
+    T: Schema,
+{
+    fn init_insert(
+        &mut self,
+        table: &str,
+        send_timeout: Option<Duration>,
+        end_timeout: Option<Duration>,
+    ) -> Result<()> {
+        debug_assert!(self.insert.is_none());
+
+        let mut new_insert: Insert<T> = self.client.insert_with_schema(table, &self.schema)?;
+        new_insert.set_timeouts(send_timeout, end_timeout);
+        self.insert = Some(new_insert);
+        Ok(())
+    }
+
+    fn should_create_insert(&self) -> bool {
+        self.insert.is_none()
+    }
+
+    fn get_insert(&mut self) -> Option<&mut Insert<T>> {
+        self.insert.as_mut()
+    }
+
+    fn take_insert(&mut self) -> Option<Insert<T>> {
+        self.insert.take()
+    }
 }
 
 /// Statistics about inserted rows.
@@ -44,24 +130,44 @@ impl Quantities {
         transactions: 0,
     };
 }
-
-impl<T> Inserter<T>
-where
-    T: Schema,
-{
-
-    pub(crate) fn new(client: &Client, table: &str, schema: Option<T>) -> Result<Self> {
-        Ok(Self {
+impl<T: 'static> Inserter<T> {
+    pub(crate) fn new(client: &Client, table: &str) -> Result<Self>
+    where
+        T: Row,
+    {
+        let insert_initer = Box::new(RowInserter {
             client: client.clone(),
+            insert: None,
+        });
+        Ok(Self {
             table: table.into(),
             max_entries: DEFAULT_MAX_ENTRIES,
             send_timeout: None,
             end_timeout: None,
-            insert: None,
             ticks: Ticks::default(),
             committed: Quantities::ZERO,
             uncommitted_entries: 0,
+            insert_initer,
+        })
+    }
+    pub(crate) fn new_with_schema(client: &Client, table: &str, schema: T) -> Result<Self>
+    where
+        T: Schema,
+    {
+        let insert_initer = Box::new(SchemaInserter {
+            client: client.clone(),
+            insert: None,
             schema,
+        });
+        Ok(Self {
+            table: table.into(),
+            max_entries: DEFAULT_MAX_ENTRIES,
+            send_timeout: None,
+            end_timeout: None,
+            ticks: Ticks::default(),
+            committed: Quantities::ZERO,
+            uncommitted_entries: 0,
+            insert_initer,
         })
     }
 
@@ -119,11 +225,32 @@ where
         self
     }
 
+    /// Serializes and writes to the socket a provided row.
+    ///
+    /// # Panics
+    /// If called after previous call returned an error.
+    #[inline]
+    pub fn write<'a, B>(&'a mut self, row: &B) -> impl Future<Output = Result<()>> + 'a + Send
+    where
+        B: Serialize,
+    {
+        self.uncommitted_entries += 1;
+        if self.insert_initer.should_create_insert() {
+            if let Err(e) =
+                self.insert_initer
+                    .init_insert(&self.table, self.send_timeout, self.end_timeout)
+            {
+                return Either::Right(future::ready(Result::<()>::Err(e)));
+            }
+        }
+        Either::Left(self.insert_initer.get_insert().unwrap().write(row))
+    }
+
     /// See [`Inserter::with_timeouts()`].
     pub fn set_timeouts(&mut self, send_timeout: Option<Duration>, end_timeout: Option<Duration>) {
         self.send_timeout = send_timeout;
         self.end_timeout = end_timeout;
-        if let Some(insert) = &mut self.insert {
+        if let Some(insert) = self.insert_initer.get_insert() {
             insert.set_timeouts(self.send_timeout, self.end_timeout);
         }
     }
@@ -161,24 +288,6 @@ where
         )
     }
 
-    /// Serializes and writes to the socket a provided row.
-    ///
-    /// # Panics
-    /// If called after previous call returned an error.
-    #[inline]
-    pub fn write<'a, B>(&'a mut self, row: &B) -> impl Future<Output = Result<()>> + 'a + Send
-    where
-        B: Serialize,
-    {
-        self.uncommitted_entries += 1;
-        if self.insert.is_none() {
-            if let Err(e) = self.init_insert() {
-                return Either::Right(future::ready(Result::<()>::Err(e)));
-            }
-        }
-        Either::Left(self.insert.as_mut().unwrap().write(row))
-    }
-
     /// Checks limits and ends a current `INSERT` if they are reached.
     pub async fn commit(&mut self) -> Result<Quantities> {
         if self.uncommitted_entries > 0 {
@@ -204,7 +313,7 @@ where
     ///
     /// If it isn't called, the current `INSERT` is aborted.
     pub async fn end(mut self) -> Result<Quantities> {
-        if let Some(insert) = self.insert.take() {
+        if let Some(insert) = self.insert_initer.take_insert() {
             insert.end().await?;
         }
         Ok(self.committed)
@@ -216,23 +325,9 @@ where
     }
 
     async fn insert(&mut self) -> Result<()> {
-        if let Some(insert) = self.insert.take() {
+        if let Some(insert) = self.insert_initer.take_insert() {
             insert.end().await?;
         }
-        Ok(())
-    }
-
-    #[cold]
-    #[inline(never)]
-    fn init_insert(&mut self) -> Result<()> {
-        debug_assert!(self.insert.is_none());
-
-        let mut new_insert: Insert<T> = match &self.schema {
-            Some(schema) => self.client.insert_with_schema(&self.table, schema)?,
-            None => todo!(),
-        };
-        new_insert.set_timeouts(self.send_timeout, self.end_timeout);
-        self.insert = Some(new_insert);
         Ok(())
     }
 }

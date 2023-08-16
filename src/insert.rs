@@ -70,10 +70,11 @@ impl<T> Insert<T> {
         Insert::new_with_columns(client, table, schema.get_columns())
     }
 
-    pub(crate) fn new_with_columns(client: &Client, table: &str, columns: Vec<&str>) -> Result<Self>
-    where
-        T: Schema,
-    {
+    fn new_with_columns(
+        client: &Client,
+        table: &str,
+        columns: Vec<&str>,
+    ) -> Result<Self> {
         let mut url = Url::parse(&client.url).map_err(|err| Error::InvalidParams(err.into()))?;
         let mut pairs = url.query_pairs_mut();
         pairs.clear();
