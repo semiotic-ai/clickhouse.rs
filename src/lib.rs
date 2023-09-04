@@ -218,4 +218,9 @@ impl Client {
     pub fn watch(&self, query: &str) -> watch::Watch {
         watch::Watch::new(self, query)
     }
+
+    pub fn database(&self) -> Option<&str> {
+        self.database.as_ref().map(String::as_str)
+
+    }
 }
